@@ -978,11 +978,20 @@ function CartSidebar({ open, onClose }: { open: boolean; onClose: () => void }) 
 
     setPlacing(true)
     try {
-      const sessionId = `mazzini-session-${Date.now()}`
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, customerName, email, phone, address, city, state, pincode }),
+        body: JSON.stringify({
+          customerName, email, phone, address, city, state, pincode,
+          cartItems: cartItems.map(item => ({
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            image: item.image,
+          })),
+          totalAmount: total,
+        }),
       })
       const data = await res.json()
 

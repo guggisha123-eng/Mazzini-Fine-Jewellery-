@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
   try {
     const email = request.nextUrl.searchParams.get('email')
     const orderNumber = request.nextUrl.searchParams.get('orderNumber')
+    const key = request.nextUrl.searchParams.get('key')
 
     if (orderNumber) {
       const order = await db.order.findUnique({
@@ -44,7 +45,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const {
-      sessionId,
       customerName,
       email,
       phone,
@@ -52,38 +52,36 @@ export async function POST(request: NextRequest) {
       city,
       state,
       pincode,
+      cartItems,
+      totalAmount: clientTotal,
     } = body
 
-    if (!sessionId || !customerName || !email || !phone || !address || !city || !state || !pincode) {
+    if (!customerName || !email || !phone || !address || !city || !state || !pincode) {
       return NextResponse.json(
-        { error: 'Missing required fields: sessionId, customerName, email, phone, address, city, state, pincode' },
+        { error: 'Missing required fields' },
         { status: 400 }
       )
     }
 
-    const cartItems = await db.cartItem.findMany({
-      where: { sessionId },
-      include: { product: true },
-    })
-
-    if (cartItems.length === 0) {
+    if (!cartItems || cartItems.length === 0) {
       return NextResponse.json(
-        { error: 'Cart is empty. Add items before placing an order.' },
+        { error: 'Cart is empty' },
         { status: 400 }
       )
     }
 
+    // Calculate total from cart items (server-side validation)
     const totalAmount = cartItems.reduce(
-      (sum, item) => sum + item.product.price * item.quantity,
+      (sum: number, item: { price: number; quantity: number }) => sum + item.price * item.quantity,
       0
     )
 
-    const orderItems = cartItems.map((item) => ({
-      productId: item.productId,
-      name: item.product.name,
-      price: item.product.price,
+    const orderItems = cartItems.map((item: { id: number; name: string; price: number; quantity: number; image: string }) => ({
+      productId: String(item.id),
+      name: item.name,
+      price: item.price,
       quantity: item.quantity,
-      image: item.product.image,
+      image: item.image,
     }))
 
     let orderNumber = generateOrderNumber()
@@ -111,21 +109,16 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    await db.cartItem.deleteMany({
-      where: { sessionId },
-    })
-
     // Build WhatsApp notification URL for the admin
-    const itemSummary = orderItems.map((i) => `${i.name} x${i.quantity}`).join(', ')
-    const orderMessage = `🛍️ New Order!\nNumber: ${orderNumber}\nCustomer: ${customerName}\nPhone: ${phone}\nEmail: ${email}\nTotal: ₹${totalAmount.toLocaleString()}\nItems: ${itemSummary}\nAddress: ${address}, ${city}, ${state} - ${pincode}`
+    const itemSummary = orderItems.map((i: { name: string; quantity: number }) => `${i.name} x${i.quantity}`).join(', ')
+    const orderMessage = `🛍️ New Mazzini Order!\n\n📦 Order: ${orderNumber}\n👤 Customer: ${customerName}\n📞 Phone: ${phone}\n📧 Email: ${email}\n💰 Total: ₹${totalAmount.toLocaleString()}\n💎 Items: ${itemSummary}\n📍 Address: ${address}, ${city}, ${state} - ${pincode}\n\nPlease confirm the order.`
     const whatsappUrl = `https://wa.me/917678279825?text=${encodeURIComponent(orderMessage)}`
 
-    // Also build the customer's tracking WhatsApp URL
+    // Customer tracking WhatsApp URL
     const customerMessage = `Hi Mazzini! I placed an order. My order number is ${orderNumber}. Please confirm.`
     const customerWhatsappUrl = `https://wa.me/917678279825?text=${encodeURIComponent(customerMessage)}`
 
     console.log(`[ORDER CREATED] ${orderNumber} - ${customerName} - ₹${totalAmount}`)
-    console.log(`[WHATSAPP NOTIFY] ${whatsappUrl}`)
 
     return NextResponse.json(
       {
@@ -140,6 +133,41 @@ export async function POST(request: NextRequest) {
     console.error('Error creating order:', error)
     return NextResponse.json(
       { error: 'Failed to create order' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { orderNumber, status } = body
+
+    if (!orderNumber || !status) {
+      return NextResponse.json(
+        { error: 'Missing orderNumber or status' },
+        { status: 400 }
+      )
+    }
+
+    const validStatuses = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled']
+    if (!validStatuses.includes(status)) {
+      return NextResponse.json(
+        { error: 'Invalid status' },
+        { status: 400 }
+      )
+    }
+
+    const order = await db.order.update({
+      where: { orderNumber },
+      data: { status },
+    })
+
+    return NextResponse.json({ order }, { status: 200 })
+  } catch (error) {
+    console.error('Error updating order:', error)
+    return NextResponse.json(
+      { error: 'Failed to update order' },
       { status: 500 }
     )
   }
