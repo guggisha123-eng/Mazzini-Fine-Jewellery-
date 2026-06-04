@@ -8,7 +8,9 @@ import {
   ChevronRight, Truck, Shield, Gem, Sparkles, Mail, Phone, MapPin,
   Instagram, Facebook, MessageCircle, ArrowRight, Grid3X3, List,
   ChevronDown, Gift, Check, Trash2, MoveRight, Send, IndianRupee,
-  ThumbsUp, User, Calendar, Quote
+  ThumbsUp, User, Calendar, Quote, Loader2, Package, ClipboardCheck,
+  Eye, Clock, BarChart3, Settings, ExternalLink, Copy, RefreshCw,
+  PackageCheck, AlertCircle
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -919,11 +921,26 @@ function ProductDetailModal({
 }
 
 /* ─── Cart Sidebar ─── */
+interface OrderSuccessData {
+  orderNumber: string
+  customerName: string
+  email: string
+  phone: string
+  address: string
+  city: string
+  state: string
+  pincode: string
+  totalAmount: number
+  customerWhatsappUrl: string
+}
+
 function CartSidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { cartItems, removeFromCart, updateQuantity, getCartTotal, clearCart } = useMazziniStore()
   const [coupon, setCoupon] = useState('')
   const [couponApplied, setCouponApplied] = useState(false)
   const [showCheckout, setShowCheckout] = useState(false)
+  const [orderSuccess, setOrderSuccess] = useState<OrderSuccessData | null>(null)
+  const [placing, setPlacing] = useState(false)
 
   const subtotal = getCartTotal()
   const shipping = subtotal >= 999 ? 0 : 99
@@ -943,9 +960,67 @@ function CartSidebar({ open, onClose }: { open: boolean; onClose: () => void }) 
     setShowCheckout(true)
   }
 
+  const handlePlaceOrder = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const formData = new FormData(e.currentTarget)
+    const customerName = formData.get('name') as string
+    const email = formData.get('email') as string
+    const phone = formData.get('phone') as string
+    const address = formData.get('address') as string
+    const city = formData.get('city') as string
+    const state = formData.get('state') as string
+    const pincode = formData.get('pincode') as string
+
+    if (!customerName || !email || !phone || !address || !city || !state || !pincode) {
+      toast.error('Please fill all required fields')
+      return
+    }
+
+    setPlacing(true)
+    try {
+      const sessionId = `mazzini-session-${Date.now()}`
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, customerName, email, phone, address, city, state, pincode }),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to place order')
+      }
+
+      clearCart()
+      setOrderSuccess({
+        orderNumber: data.order.orderNumber,
+        customerName,
+        email,
+        phone,
+        address,
+        city,
+        state,
+        pincode,
+        totalAmount: data.order.totalAmount,
+        customerWhatsappUrl: data.customerWhatsappUrl,
+      })
+      toast.success('Order placed successfully! 🎉')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to place order'
+      toast.error(message)
+    } finally {
+      setPlacing(false)
+    }
+  }
+
+  const handleCloseSuccess = () => {
+    setOrderSuccess(null)
+    setShowCheckout(false)
+    onClose()
+  }
+
   return (
     <>
-      <Sheet open={open && !showCheckout} onOpenChange={onClose}>
+      <Sheet open={open && !showCheckout && !orderSuccess} onOpenChange={onClose}>
         <SheetContent side="right" className="bg-[#1c1917] border-stone-700/50 w-full sm:w-[420px] p-0 flex flex-col">
           <SheetHeader className="p-6 pb-0">
             <SheetTitle className="text-white flex items-center gap-2">
@@ -1063,7 +1138,7 @@ function CartSidebar({ open, onClose }: { open: boolean; onClose: () => void }) 
       </Sheet>
 
       {/* Checkout Modal */}
-      <Dialog open={showCheckout} onOpenChange={setShowCheckout}>
+      <Dialog open={showCheckout && !orderSuccess} onOpenChange={(v) => { if (!v) setShowCheckout(false) }}>
         <DialogContent className="bg-[#1c1917] border-stone-700/50 max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-2">
@@ -1072,43 +1147,25 @@ function CartSidebar({ open, onClose }: { open: boolean; onClose: () => void }) 
             </DialogTitle>
           </DialogHeader>
 
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              const formData = new FormData(e.currentTarget)
-              const name = formData.get('name') as string
-              const email = formData.get('email') as string
-              if (!name || !email) {
-                toast.error('Please fill all required fields')
-                return
-              }
-              clearCart()
-              setShowCheckout(false)
-              onClose()
-              toast.success('Order placed successfully! 🎉', {
-                description: `Thank you, ${name}! Your order will be delivered within 5-7 business days.`,
-              })
-            }}
-            className="space-y-4"
-          >
+          <form onSubmit={handlePlaceOrder} className="space-y-4">
             <div>
               <h3 className="text-amber-400 text-sm font-semibold mb-3">Contact Information</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Input name="name" placeholder="Full Name *" className="bg-[#292524] border-stone-600 text-white placeholder-stone-500" />
-                <Input name="email" type="email" placeholder="Email *" className="bg-[#292524] border-stone-600 text-white placeholder-stone-500" />
-                <Input name="phone" placeholder="Phone *" className="bg-[#292524] border-stone-600 text-white placeholder-stone-500" />
+                <Input name="name" placeholder="Full Name *" required className="bg-[#292524] border-stone-600 text-white placeholder-stone-500" />
+                <Input name="email" type="email" placeholder="Email *" required className="bg-[#292524] border-stone-600 text-white placeholder-stone-500" />
+                <Input name="phone" placeholder="Phone *" required className="bg-[#292524] border-stone-600 text-white placeholder-stone-500" />
               </div>
             </div>
 
             <div>
               <h3 className="text-amber-400 text-sm font-semibold mb-3">Shipping Address</h3>
               <div className="grid grid-cols-1 gap-3">
-                <Input name="address" placeholder="Address *" className="bg-[#292524] border-stone-600 text-white placeholder-stone-500" />
+                <Input name="address" placeholder="Address *" required className="bg-[#292524] border-stone-600 text-white placeholder-stone-500" />
                 <div className="grid grid-cols-2 gap-3">
-                  <Input name="city" placeholder="City *" className="bg-[#292524] border-stone-600 text-white placeholder-stone-500" />
-                  <Input name="state" placeholder="State *" className="bg-[#292524] border-stone-600 text-white placeholder-stone-500" />
+                  <Input name="city" placeholder="City *" required className="bg-[#292524] border-stone-600 text-white placeholder-stone-500" />
+                  <Input name="state" placeholder="State *" required className="bg-[#292524] border-stone-600 text-white placeholder-stone-500" />
                 </div>
-                <Input name="pincode" placeholder="Pincode *" className="bg-[#292524] border-stone-600 text-white placeholder-stone-500" />
+                <Input name="pincode" placeholder="Pincode *" required className="bg-[#292524] border-stone-600 text-white placeholder-stone-500" />
               </div>
             </div>
 
@@ -1139,11 +1196,127 @@ function CartSidebar({ open, onClose }: { open: boolean; onClose: () => void }) 
               </div>
             </div>
 
-            <Button type="submit" className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold h-12">
-              <Check className="w-4 h-4 mr-2" />
-              Place Order
+            <Button type="submit" disabled={placing} className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold h-12">
+              {placing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Placing Order...
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4 mr-2" />
+                  Place Order
+                </>
+              )}
             </Button>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Order Success Modal */}
+      <Dialog open={!!orderSuccess} onOpenChange={(v) => { if (!v) handleCloseSuccess() }}>
+        <DialogContent className="bg-[#1c1917] border-stone-700/50 max-w-lg max-h-[90vh] overflow-y-auto">
+          {orderSuccess && (
+            <div className="text-center py-4">
+              {/* Success Icon */}
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+                className="w-20 h-20 rounded-full bg-green-600/20 flex items-center justify-center mx-auto mb-5"
+              >
+                <ClipboardCheck className="w-10 h-10 text-green-400" />
+              </motion.div>
+
+              <h2 className="text-white text-2xl font-bold mb-2">Order Placed Successfully!</h2>
+              <p className="text-stone-400 text-sm mb-6">Thank you for shopping with Mazzini Fine Jewellery</p>
+
+              {/* Order Number */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="bg-[#292524] rounded-xl p-5 mb-4 border border-amber-900/30"
+              >
+                <p className="text-stone-400 text-xs uppercase tracking-wider mb-1">Order Number</p>
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-amber-400 text-2xl font-bold">{orderSuccess.orderNumber}</span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(orderSuccess.orderNumber)
+                      toast.success('Order number copied!')
+                    }}
+                    className="text-stone-500 hover:text-amber-400 transition-colors"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex items-center justify-center gap-2 mt-2 text-green-400 text-sm">
+                  <Truck className="w-4 h-4" />
+                  Estimated Delivery: 5-7 business days
+                </div>
+              </motion.div>
+
+              {/* Customer Details */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="bg-[#292524] rounded-xl p-4 mb-4 text-left"
+              >
+                <h3 className="text-amber-400 text-sm font-semibold mb-3">Delivery Details</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-stone-500">Name</span>
+                    <span className="text-stone-200">{orderSuccess.customerName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-stone-500">Email</span>
+                    <span className="text-stone-200 text-xs">{orderSuccess.email}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-stone-500">Phone</span>
+                    <span className="text-stone-200">{orderSuccess.phone}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-stone-500">Address</span>
+                    <span className="text-stone-200 text-xs text-right max-w-[60%]">{orderSuccess.address}, {orderSuccess.city}, {orderSuccess.state} - {orderSuccess.pincode}</span>
+                  </div>
+                  <Separator className="bg-stone-700" />
+                  <div className="flex justify-between font-bold">
+                    <span className="text-stone-300">Total Paid</span>
+                    <span className="text-amber-400 flex items-center"><IndianRupee className="w-3.5 h-3.5" />{orderSuccess.totalAmount.toLocaleString()}</span>
+                  </div>
+                </div>
+              </motion.div>
+
+              {/* WhatsApp Track Button */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                className="space-y-3"
+              >
+                <a
+                  href={orderSuccess.customerWhatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full bg-green-600 hover:bg-green-700 text-white font-semibold h-12 rounded-md transition-colors"
+                >
+                  <MessageCircle className="w-5 h-5" />
+                  Track Order on WhatsApp
+                </a>
+
+                <Button
+                  onClick={handleCloseSuccess}
+                  className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold h-12"
+                >
+                  Continue Shopping
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </motion.div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </>
@@ -1425,7 +1598,422 @@ function NewsletterSection() {
 }
 
 /* ─── Section: Footer ─── */
-function Footer() {
+/* ─── Track Order Dialog ─── */
+function TrackOrderDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [orderNumber, setOrderNumber] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [orderData, setOrderData] = useState<Record<string, unknown> | null>(null)
+  const [error, setError] = useState('')
+
+  const handleTrack = async () => {
+    if (!orderNumber.trim()) {
+      toast.error('Please enter an order number')
+      return
+    }
+    setLoading(true)
+    setError('')
+    setOrderData(null)
+    try {
+      const res = await fetch(`/api/orders?orderNumber=${encodeURIComponent(orderNumber.trim())}`)
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || 'Order not found')
+        return
+      }
+      setOrderData(data.order)
+    } catch {
+      setError('Failed to fetch order. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return 'text-yellow-400 bg-yellow-400/10 border-yellow-600/30'
+      case 'confirmed': return 'text-blue-400 bg-blue-400/10 border-blue-600/30'
+      case 'shipped': return 'text-purple-400 bg-purple-400/10 border-purple-600/30'
+      case 'delivered': return 'text-green-400 bg-green-400/10 border-green-600/30'
+      case 'cancelled': return 'text-red-400 bg-red-400/10 border-red-600/30'
+      default: return 'text-stone-400 bg-stone-400/10 border-stone-600/30'
+    }
+  }
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'pending': return <Clock className="w-4 h-4" />
+      case 'confirmed': return <Check className="w-4 h-4" />
+      case 'shipped': return <Truck className="w-4 h-4" />
+      case 'delivered': return <PackageCheck className="w-4 h-4" />
+      case 'cancelled': return <AlertCircle className="w-4 h-4" />
+      default: return <Package className="w-4 h-4" />
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="bg-[#1c1917] border-stone-700/50 max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-white flex items-center gap-2">
+            <Package className="w-5 h-5 text-amber-500" />
+            Track Your Order
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <Input
+              placeholder="Enter order number (e.g. MZ-12345)"
+              value={orderNumber}
+              onChange={(e) => setOrderNumber(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleTrack()}
+              className="bg-[#292524] border-stone-600 text-white placeholder-stone-500"
+            />
+            <Button
+              onClick={handleTrack}
+              disabled={loading}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+            </Button>
+          </div>
+
+          {error && (
+            <div className="bg-red-900/20 border border-red-800/30 rounded-lg p-4 text-center">
+              <AlertCircle className="w-8 h-8 text-red-400 mx-auto mb-2" />
+              <p className="text-red-400 text-sm">{error}</p>
+            </div>
+          )}
+
+          {orderData && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-[#292524] rounded-xl p-5 border border-stone-700/50"
+            >
+              {/* Status Badge */}
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-stone-400 text-sm">Order #{orderData.orderNumber as string}</span>
+                <Badge className={`${getStatusColor(orderData.status as string)} border text-xs`}>
+                  <span className="mr-1">{getStatusIcon(orderData.status as string)}</span>
+                  {(orderData.status as string).charAt(0).toUpperCase() + (orderData.status as string).slice(1)}
+                </Badge>
+              </div>
+
+              {/* Status Timeline */}
+              <div className="flex items-center gap-1 mb-4">
+                {['pending', 'confirmed', 'shipped', 'delivered'].map((step, i) => {
+                  const statuses = ['pending', 'confirmed', 'shipped', 'delivered']
+                  const currentIndex = statuses.indexOf(orderData.status as string)
+                  const isCompleted = i <= currentIndex && (orderData.status as string) !== 'cancelled'
+                  const isCurrent = i === currentIndex
+                  return (
+                    <React.Fragment key={step}>
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                        isCompleted
+                          ? 'bg-amber-600 text-white'
+                          : 'bg-stone-700 text-stone-500'
+                      } ${isCurrent ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#292524]' : ''}`}>
+                        {isCompleted ? '✓' : i + 1}
+                      </div>
+                      {i < 3 && (
+                        <div className={`flex-1 h-0.5 ${isCompleted && i < currentIndex ? 'bg-amber-600' : 'bg-stone-700'}`} />
+                      )}
+                    </React.Fragment>
+                  )
+                })}
+              </div>
+
+              <Separator className="bg-stone-700 mb-3" />
+
+              {/* Details */}
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Customer</span>
+                  <span className="text-stone-200">{orderData.customerName as string}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Total</span>
+                  <span className="text-amber-400 font-semibold flex items-center">
+                    <IndianRupee className="w-3 h-3" />
+                    {(orderData.totalAmount as number).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Placed</span>
+                  <span className="text-stone-200 text-xs">
+                    {new Date(orderData.createdAt as string).toLocaleDateString('en-IN', {
+                      day: 'numeric', month: 'short', year: 'numeric'
+                    })}
+                  </span>
+                </div>
+              </div>
+
+              {/* WhatsApp Track */}
+              <a
+                href={`https://wa.me/917678279825?text=${encodeURIComponent(`Hi Mazzini! I want to track my order. My order number is ${orderData.orderNumber as string}.`)} `}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 mt-4 w-full bg-green-600 hover:bg-green-700 text-white font-semibold h-10 rounded-md transition-colors text-sm"
+              >
+                <MessageCircle className="w-4 h-4" />
+                Contact on WhatsApp
+              </a>
+            </motion.div>
+          )}
+
+          {!error && !orderData && (
+            <div className="text-center py-6 text-stone-500 text-sm">
+              <Package className="w-12 h-12 mx-auto mb-3 text-stone-700" />
+              <p>Enter your order number to track your order status</p>
+              <p className="text-xs mt-1">Format: MZ-XXXXX</p>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/* ─── Admin Panel Dialog ─── */
+function AdminPanelDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [orders, setOrders] = useState<Record<string, unknown>[]>([])
+  const [stats, setStats] = useState<Record<string, number> | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [activeTab, setActiveTab] = useState<'orders' | 'stats'>('orders')
+  const [updating, setUpdating] = useState<string | null>(null)
+
+  const fetchOrders = useCallback(async (p: number) => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/admin/orders?key=mazzini-admin-2026&page=${p}&limit=10`)
+      const data = await res.json()
+      if (res.ok) {
+        setOrders(data.orders)
+        setTotalPages(data.pagination.totalPages)
+      }
+    } catch {
+      toast.error('Failed to fetch orders')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/stats?key=mazzini-admin-2026')
+      const data = await res.json()
+      if (res.ok) setStats(data)
+    } catch {
+      toast.error('Failed to fetch stats')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (open) {
+      fetchOrders(1)
+      fetchStats()
+    }
+  }, [open, fetchOrders, fetchStats])
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage)
+    fetchOrders(newPage)
+  }
+
+  const handleStatusUpdate = async (orderId: string, newStatus: string) => {
+    setUpdating(orderId)
+    try {
+      const res = await fetch('/api/admin/orders?key=mazzini-admin-2026', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, status: newStatus }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success(`Order status updated to ${newStatus}`)
+        fetchOrders(page)
+        fetchStats()
+      } else {
+        toast.error(data.error || 'Failed to update status')
+      }
+    } catch {
+      toast.error('Failed to update status')
+    } finally {
+      setUpdating(null)
+    }
+  }
+
+  const getStatusBadge = (status: string) => {
+    const styles: Record<string, string> = {
+      pending: 'bg-yellow-400/10 text-yellow-400 border-yellow-600/30',
+      confirmed: 'bg-blue-400/10 text-blue-400 border-blue-600/30',
+      shipped: 'bg-purple-400/10 text-purple-400 border-purple-600/30',
+      delivered: 'bg-green-400/10 text-green-400 border-green-600/30',
+      cancelled: 'bg-red-400/10 text-red-400 border-red-600/30',
+    }
+    return styles[status] || 'bg-stone-400/10 text-stone-400 border-stone-600/30'
+  }
+
+  const getNextStatus = (current: string): string[] => {
+    switch (current) {
+      case 'pending': return ['confirmed', 'cancelled']
+      case 'confirmed': return ['shipped', 'cancelled']
+      case 'shipped': return ['delivered']
+      default: return []
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="bg-[#1c1917] border-stone-700/50 max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-white flex items-center gap-2">
+            <Settings className="w-5 h-5 text-amber-500" />
+            Admin Dashboard
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Tabs */}
+        <div className="flex gap-2 mb-4">
+          <Button
+            size="sm"
+            variant={activeTab === 'stats' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('stats')}
+            className={activeTab === 'stats' ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'border-stone-600 text-stone-300'}
+          >
+            <BarChart3 className="w-4 h-4 mr-1" /> Stats
+          </Button>
+          <Button
+            size="sm"
+            variant={activeTab === 'orders' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('orders')}
+            className={activeTab === 'orders' ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'border-stone-600 text-stone-300'}
+          >
+            <Package className="w-4 h-4 mr-1" /> Orders
+          </Button>
+        </div>
+
+        {activeTab === 'stats' && stats && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: 'Total Orders', value: stats.totalOrders, icon: Package, color: 'text-amber-400' },
+              { label: 'Total Revenue', value: `₹${stats.totalRevenue.toLocaleString()}`, icon: IndianRupee, color: 'text-green-400' },
+              { label: 'Pending', value: stats.pendingOrders, icon: Clock, color: 'text-yellow-400' },
+              { label: 'Products', value: stats.productsCount, icon: Gem, color: 'text-purple-400' },
+              { label: 'Confirmed', value: stats.confirmedOrders, icon: Check, color: 'text-blue-400' },
+              { label: 'Shipped', value: stats.shippedOrders, icon: Truck, color: 'text-indigo-400' },
+              { label: 'Delivered', value: stats.deliveredOrders, icon: PackageCheck, color: 'text-emerald-400' },
+              { label: 'Today\'s Orders', value: stats.todayOrders, icon: Calendar, color: 'text-rose-400' },
+            ].map((stat) => (
+              <Card key={stat.label} className="bg-[#292524] border-stone-700/50">
+                <CardContent className="p-4">
+                  <stat.icon className={`w-5 h-5 ${stat.color} mb-2`} />
+                  <p className="text-white font-bold text-lg">{stat.value}</p>
+                  <p className="text-stone-500 text-xs">{stat.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {activeTab === 'orders' && (
+          <div>
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+              </div>
+            ) : orders.length === 0 ? (
+              <div className="text-center py-12 text-stone-500">
+                <Package className="w-12 h-12 mx-auto mb-3 text-stone-700" />
+                <p>No orders yet</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+                {orders.map((order) => (
+                  <div key={order.id as string} className="bg-[#292524] rounded-lg p-4 border border-stone-700/50">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-amber-400 font-bold text-sm">{order.orderNumber as string}</span>
+                          <Badge className={`${getStatusBadge(order.status as string)} border text-[10px]`}>
+                            {(order.status as string).charAt(0).toUpperCase() + (order.status as string).slice(1)}
+                          </Badge>
+                        </div>
+                        <p className="text-stone-300 text-sm">{order.customerName as string}</p>
+                        <p className="text-stone-500 text-xs">{order.email as string} • {order.phone as string}</p>
+                        <p className="text-stone-500 text-xs mt-1">{order.address as string}, {order.city as string}, {order.state as string} - {order.pincode as string}</p>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-amber-400 text-sm font-semibold flex items-center">
+                            <IndianRupee className="w-3 h-3" />
+                            {(order.totalAmount as number).toLocaleString()}
+                          </span>
+                          <span className="text-stone-600 text-xs">
+                            {new Date(order.createdAt as string).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1.5 sm:items-end">
+                        {getNextStatus(order.status as string).map((nextStatus) => (
+                          <Button
+                            key={nextStatus}
+                            size="sm"
+                            variant="outline"
+                            disabled={updating === (order.id as string)}
+                            onClick={() => handleStatusUpdate(order.id as string, nextStatus)}
+                            className={`text-xs h-7 ${
+                              nextStatus === 'cancelled'
+                                ? 'border-red-600 text-red-400 hover:bg-red-900/20'
+                                : 'border-amber-600 text-amber-400 hover:bg-amber-900/20'
+                            }`}
+                          >
+                            {updating === (order.id as string) ? (
+                              <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                            ) : null}
+                            Mark as {nextStatus.charAt(0).toUpperCase() + nextStatus.slice(1)}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-stone-700/50">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page <= 1}
+                  onClick={() => handlePageChange(page - 1)}
+                  className="border-stone-600 text-stone-300 h-8 text-xs"
+                >
+                  Previous
+                </Button>
+                <span className="text-stone-400 text-xs">Page {page} of {totalPages}</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page >= totalPages}
+                  onClick={() => handlePageChange(page + 1)}
+                  className="border-stone-600 text-stone-300 h-8 text-xs"
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function Footer({ onTrackOrder, onAdminOpen }: { onTrackOrder: () => void; onAdminOpen: () => void }) {
   const quickLinks = [
     { label: 'Home', href: 'hero' },
     { label: 'Collections', href: 'featured' },
@@ -1436,7 +2024,7 @@ function Footer() {
 
   const categoryLinks = ['Necklaces', 'Earrings', 'Bangles', 'Rings', 'Pendants & Lockets', 'Anklets', 'Maang Tikka']
 
-  const serviceLinks = ['Shipping Policy', 'Return Policy', 'Privacy Policy', 'Terms & Conditions', 'FAQ', 'Track Order']
+  const serviceLinks = ['Shipping Policy', 'Return Policy', 'Privacy Policy', 'Terms & Conditions', 'FAQ']
 
   const scrollTo = (id: string) => {
     const el = document.getElementById(id)
@@ -1515,6 +2103,16 @@ function Footer() {
               </div>
             </div>
 
+            {/* Track Order Button */}
+            <Button
+              onClick={onTrackOrder}
+              variant="outline"
+              className="mt-4 w-full border-amber-600 text-amber-400 hover:bg-amber-900/20 hover:text-amber-300 text-xs h-9"
+            >
+              <Package className="w-3.5 h-3.5 mr-1.5" />
+              Track Your Order
+            </Button>
+
             <h3 className="text-white font-semibold text-sm mt-6 mb-3">Payment Methods</h3>
             <div className="flex gap-2 flex-wrap">
               <div className="bg-stone-800 rounded px-2.5 py-1 text-stone-400 text-[10px] font-medium">UPI</div>
@@ -1528,9 +2126,18 @@ function Footer() {
 
       <div className="border-t border-stone-800 py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-stone-600 text-xs sm:text-sm">&copy; 2026 Mazzini Fine Jewellery. All rights reserved.</p>
+          <div className="flex items-center gap-2">
+            <p className="text-stone-600 text-xs sm:text-sm">&copy; 2026 Mazzini Fine Jewellery. All rights reserved.</p>
+            <button
+              onClick={onAdminOpen}
+              className="text-stone-800 hover:text-stone-500 text-[9px] transition-colors cursor-default"
+              title="Admin"
+            >
+              ⚙
+            </button>
+          </div>
           <div className="flex gap-4 text-stone-600 text-xs">
-            {serviceLinks.slice(0, 3).map((link) => (
+            {serviceLinks.map((link) => (
               <span key={link} className="hover:text-amber-400 cursor-pointer transition-colors">{link}</span>
             ))}
           </div>
@@ -1568,6 +2175,8 @@ export default function Home() {
   const [selectedProduct, setSelectedProduct] = useState<typeof allProducts[0] | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState('All')
+  const [trackOrderOpen, setTrackOrderOpen] = useState(false)
+  const [adminOpen, setAdminOpen] = useState(false)
 
   const handleViewDetail = useCallback((product: typeof allProducts[0]) => {
     setSelectedProduct(product)
@@ -1611,7 +2220,7 @@ export default function Home() {
 
       {/* Footer */}
       <div className="mt-auto">
-        <Footer />
+        <Footer onTrackOrder={() => setTrackOrderOpen(true)} onAdminOpen={() => setAdminOpen(true)} />
       </div>
 
       {/* Modals & Sidebars */}
@@ -1624,6 +2233,8 @@ export default function Home() {
       <CartSidebar open={cartOpen} onClose={() => setCartOpen(false)} />
       <WishlistSidebar open={wishlistOpen} onClose={() => setWishlistOpen(false)} />
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} onViewDetail={handleViewDetail} />
+      <TrackOrderDialog open={trackOrderOpen} onClose={() => setTrackOrderOpen(false)} />
+      <AdminPanelDialog open={adminOpen} onClose={() => setAdminOpen(false)} />
 
       {/* WhatsApp Floating Button */}
       <WhatsAppButton />

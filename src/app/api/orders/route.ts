@@ -115,9 +115,23 @@ export async function POST(request: NextRequest) {
       where: { sessionId },
     })
 
+    // Build WhatsApp notification URL for the admin
+    const itemSummary = orderItems.map((i) => `${i.name} x${i.quantity}`).join(', ')
+    const orderMessage = `🛍️ New Order!\nNumber: ${orderNumber}\nCustomer: ${customerName}\nPhone: ${phone}\nEmail: ${email}\nTotal: ₹${totalAmount.toLocaleString()}\nItems: ${itemSummary}\nAddress: ${address}, ${city}, ${state} - ${pincode}`
+    const whatsappUrl = `https://wa.me/917678279825?text=${encodeURIComponent(orderMessage)}`
+
+    // Also build the customer's tracking WhatsApp URL
+    const customerMessage = `Hi Mazzini! I placed an order. My order number is ${orderNumber}. Please confirm.`
+    const customerWhatsappUrl = `https://wa.me/917678279825?text=${encodeURIComponent(customerMessage)}`
+
+    console.log(`[ORDER CREATED] ${orderNumber} - ${customerName} - ₹${totalAmount}`)
+    console.log(`[WHATSAPP NOTIFY] ${whatsappUrl}`)
+
     return NextResponse.json(
       {
         order,
+        whatsappUrl,
+        customerWhatsappUrl,
         message: 'Order placed successfully!',
       },
       { status: 201 }
