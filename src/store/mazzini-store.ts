@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
 export interface CartItem {
   id: number
@@ -32,63 +33,70 @@ interface MazziniStore {
   getCartCount: () => number
 }
 
-export const useMazziniStore = create<MazziniStore>((set, get) => ({
-  cartItems: [],
-  wishlistItems: [],
+export const useMazziniStore = create<MazziniStore>()(
+  persist(
+    (set, get) => ({
+      cartItems: [],
+      wishlistItems: [],
 
-  addToCart: (item) => {
-    set((state) => {
-      const existing = state.cartItems.find((ci) => ci.id === item.id)
-      if (existing) {
-        return {
-          cartItems: state.cartItems.map((ci) =>
-            ci.id === item.id ? { ...ci, quantity: ci.quantity + 1 } : ci
-          ),
+      addToCart: (item) => {
+        set((state) => {
+          const existing = state.cartItems.find((ci) => ci.id === item.id)
+          if (existing) {
+            return {
+              cartItems: state.cartItems.map((ci) =>
+                ci.id === item.id ? { ...ci, quantity: ci.quantity + 1 } : ci
+              ),
+            }
+          }
+          return { cartItems: [...state.cartItems, { ...item, quantity: 1 }] }
+        })
+      },
+
+      removeFromCart: (id) => {
+        set((state) => ({
+          cartItems: state.cartItems.filter((ci) => ci.id !== id),
+        }))
+      },
+
+      updateQuantity: (id, qty) => {
+        if (qty <= 0) {
+          get().removeFromCart(id)
+          return
         }
-      }
-      return { cartItems: [...state.cartItems, { ...item, quantity: 1 }] }
-    })
-  },
+        set((state) => ({
+          cartItems: state.cartItems.map((ci) =>
+            ci.id === id ? { ...ci, quantity: qty } : ci
+          ),
+        }))
+      },
 
-  removeFromCart: (id) => {
-    set((state) => ({
-      cartItems: state.cartItems.filter((ci) => ci.id !== id),
-    }))
-  },
+      clearCart: () => set({ cartItems: [] }),
 
-  updateQuantity: (id, qty) => {
-    if (qty <= 0) {
-      get().removeFromCart(id)
-      return
+      addToWishlist: (item) => {
+        set((state) => {
+          const exists = state.wishlistItems.find((wi) => wi.id === item.id)
+          if (exists) return state
+          return { wishlistItems: [...state.wishlistItems, item] }
+        })
+      },
+
+      removeFromWishlist: (id) => {
+        set((state) => ({
+          wishlistItems: state.wishlistItems.filter((wi) => wi.id !== id),
+        }))
+      },
+
+      getCartTotal: () => {
+        return get().cartItems.reduce((total, item) => total + item.price * item.quantity, 0)
+      },
+
+      getCartCount: () => {
+        return get().cartItems.reduce((count, item) => count + item.quantity, 0)
+      },
+    }),
+    {
+      name: 'mazzini-store', // localStorage key
     }
-    set((state) => ({
-      cartItems: state.cartItems.map((ci) =>
-        ci.id === id ? { ...ci, quantity: qty } : ci
-      ),
-    }))
-  },
-
-  clearCart: () => set({ cartItems: [] }),
-
-  addToWishlist: (item) => {
-    set((state) => {
-      const exists = state.wishlistItems.find((wi) => wi.id === item.id)
-      if (exists) return state
-      return { wishlistItems: [...state.wishlistItems, item] }
-    })
-  },
-
-  removeFromWishlist: (id) => {
-    set((state) => ({
-      wishlistItems: state.wishlistItems.filter((wi) => wi.id !== id),
-    }))
-  },
-
-  getCartTotal: () => {
-    return get().cartItems.reduce((total, item) => total + item.price * item.quantity, 0)
-  },
-
-  getCartCount: () => {
-    return get().cartItems.reduce((count, item) => count + item.quantity, 0)
-  },
-}))
+  )
+)
