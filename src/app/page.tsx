@@ -2187,23 +2187,85 @@ export default function Home() {
   const [trackOrderOpen, setTrackOrderOpen] = useState(false)
   const [adminOpen, setAdminOpen] = useState(false)
 
+  // Track which overlay is currently on top (for history management)
+  const overlayStack = useMemo(() => {
+    const stack: string[] = []
+    if (searchOpen) stack.push('search')
+    if (cartOpen) stack.push('cart')
+    if (wishlistOpen) stack.push('wishlist')
+    if (detailOpen) stack.push('detail')
+    if (trackOrderOpen) stack.push('track')
+    if (adminOpen) stack.push('admin')
+    return stack
+  }, [searchOpen, cartOpen, wishlistOpen, detailOpen, trackOrderOpen, adminOpen])
+
+  // Push history entry when any overlay opens
+  const pushHistory = useCallback((name: string) => {
+    window.history.pushState({ overlay: name }, '')
+  }, [])
+
+  // Listen for browser back button to close topmost overlay
+  useEffect(() => {
+    const handlePopState = () => {
+      if (overlayStack.length > 0) {
+        const top = overlayStack[overlayStack.length - 1]
+        switch (top) {
+          case 'search': setSearchOpen(false); break
+          case 'cart': setCartOpen(false); break
+          case 'wishlist': setWishlistOpen(false); break
+          case 'detail': setDetailOpen(false); break
+          case 'track': setTrackOrderOpen(false); break
+          case 'admin': setAdminOpen(false); break
+        }
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [overlayStack])
+
   const handleViewDetail = useCallback((product: typeof allProducts[0]) => {
     setSelectedProduct(product)
     setDetailOpen(true)
-  }, [])
+    pushHistory('detail')
+  }, [pushHistory])
 
   const handleCategorySelect = useCallback((category: string) => {
     setCategoryFilter(category)
     document.getElementById('all-products')?.scrollIntoView({ behavior: 'smooth' })
   }, [])
 
+  const handleSearchOpen = useCallback(() => {
+    setSearchOpen(true)
+    pushHistory('search')
+  }, [pushHistory])
+
+  const handleCartOpen = useCallback(() => {
+    setCartOpen(true)
+    pushHistory('cart')
+  }, [pushHistory])
+
+  const handleWishlistOpen = useCallback(() => {
+    setWishlistOpen(true)
+    pushHistory('wishlist')
+  }, [pushHistory])
+
+  const handleTrackOrderOpen = useCallback(() => {
+    setTrackOrderOpen(true)
+    pushHistory('track')
+  }, [pushHistory])
+
+  const handleAdminOpen = useCallback(() => {
+    setAdminOpen(true)
+    pushHistory('admin')
+  }, [pushHistory])
+
   return (
     <div className="min-h-screen flex flex-col bg-[#1c1917]">
       {/* Navbar */}
       <Navbar
-        onSearchOpen={() => setSearchOpen(true)}
-        onCartOpen={() => setCartOpen(true)}
-        onWishlistOpen={() => setWishlistOpen(true)}
+        onSearchOpen={handleSearchOpen}
+        onCartOpen={handleCartOpen}
+        onWishlistOpen={handleWishlistOpen}
       />
 
       {/* Main Content */}
@@ -2229,7 +2291,7 @@ export default function Home() {
 
       {/* Footer */}
       <div className="mt-auto">
-        <Footer onTrackOrder={() => setTrackOrderOpen(true)} onAdminOpen={() => setAdminOpen(true)} />
+        <Footer onTrackOrder={handleTrackOrderOpen} onAdminOpen={handleAdminOpen} />
       </div>
 
       {/* Modals & Sidebars */}
