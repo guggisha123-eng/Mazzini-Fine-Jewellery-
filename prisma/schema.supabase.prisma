@@ -1,12 +1,18 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// ============================================
+// MAZZINI - Supabase PostgreSQL Schema
+// ============================================
+// WHEN DEPLOYING TO VERCEL + SUPABASE:
+// 1. Replace the content of prisma/schema.prisma with this file
+// 2. Set DATABASE_URL in Vercel Environment Variables to your Supabase URL
+// 3. Run: npx prisma db push
+// ============================================
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -28,9 +34,9 @@ model Product {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  cartItems    CartItem[]
+  cartItems     CartItem[]
   wishlistItems WishlistItem[]
-  reviews      Review[]
+  reviews       Review[]
 }
 
 model CartItem {
